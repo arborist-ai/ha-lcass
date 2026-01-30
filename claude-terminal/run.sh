@@ -12,11 +12,12 @@ init_environment() {
     local cache_dir="/data/.cache"
     local state_dir="/data/.local/state"
     local claude_config_dir="/data/.config/claude"
+    local local_bin="/data/home/.local/bin"
 
     bashio::log.info "Initializing Claude Code environment in /data..."
 
-    # Create all required directories
-    if ! mkdir -p "$data_home" "$config_dir/claude" "$cache_dir" "$state_dir" "/data/.local"; then
+    # Create all required directories (including ~/.local/bin for Claude native installation)
+    if ! mkdir -p "$data_home" "$config_dir/claude" "$cache_dir" "$state_dir" "/data/.local" "$local_bin"; then
         bashio::log.error "Failed to create directories in /data"
         exit 1
     fi
@@ -35,19 +36,31 @@ init_environment() {
     export XDG_CACHE_HOME="$cache_dir"
     export XDG_STATE_HOME="$state_dir"
     export XDG_DATA_HOME="/data/.local/share"
-    
+
     # Claude-specific environment variables
     export ANTHROPIC_CONFIG_DIR="$claude_config_dir"
     export ANTHROPIC_HOME="/data"
+
+    # Setup PATH to include $HOME/.local/bin for Claude native installation
+    # The native installer expects claude binary at ~/.local/bin/claude
+    # Create symlink from the build-time installation location
+    if [ ! -e "$local_bin/claude" ] && [ -x "/root/.local/bin/claude" ]; then
+        ln -sf /root/.local/bin/claude "$local_bin/claude"
+        bashio::log.info "Created claude symlink at $local_bin/claude"
+    fi
+
+    # Add $HOME/.local/bin to PATH (required by Claude native installation check)
+    export PATH="$local_bin:$PATH"
 
     # Migrate any existing authentication files from legacy locations
     migrate_legacy_auth_files "$claude_config_dir"
 
     bashio::log.info "Environment initialized:"
     bashio::log.info "  - Home: $HOME"
-    bashio::log.info "  - Config: $XDG_CONFIG_HOME" 
+    bashio::log.info "  - Config: $XDG_CONFIG_HOME"
     bashio::log.info "  - Claude config: $ANTHROPIC_CONFIG_DIR"
     bashio::log.info "  - Cache: $XDG_CACHE_HOME"
+    bashio::log.info "  - PATH includes: $local_bin"
 }
 
 # One-time migration of existing authentication files
